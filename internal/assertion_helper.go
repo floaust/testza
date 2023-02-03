@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"atomicgo.dev/assert"
 	"bytes"
 	"errors"
 	"fmt"
@@ -10,56 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/pterm/pterm"
 )
-
-// IsKind returns if an object is kind of a specific kind.
-func IsKind(expectedKind reflect.Kind, value interface{}) bool {
-	return reflect.TypeOf(value).Kind() == expectedKind
-}
-
-// IsNil checks if an object is nil.
-func IsNil(object interface{}) bool {
-	if object == nil {
-		return true
-	}
-
-	switch reflect.ValueOf(object).Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
-		return reflect.ValueOf(object).IsNil()
-	}
-
-	return false
-}
-
-// IsNumber checks if the value is of a numeric kind.
-func IsNumber(value interface{}) bool {
-	numberKinds := []reflect.Kind{
-		reflect.Int,
-		reflect.Int8,
-		reflect.Int16,
-		reflect.Int32,
-		reflect.Int64,
-		reflect.Float32,
-		reflect.Float64,
-		reflect.Uint,
-		reflect.Uint8,
-		reflect.Uint16,
-		reflect.Uint32,
-		reflect.Uint64,
-		reflect.Complex64,
-		reflect.Complex128,
-	}
-
-	for _, k := range numberKinds {
-		if IsKind(k, value) {
-			return true
-		}
-	}
-
-	return false
-}
 
 // CompletesIn returns if a function completes in a specific time.
 func CompletesIn(duration time.Duration, f func()) bool {
@@ -77,13 +29,8 @@ func CompletesIn(duration time.Duration, f func()) bool {
 	}
 }
 
-// IsZero checks if a value is the zero value of its type.
-func IsZero(value interface{}) bool {
-	return value == nil || reflect.DeepEqual(value, reflect.Zero(reflect.TypeOf(value)).Interface())
-}
-
 // IsEqual checks if two objects are equal.
-func IsEqual(expected interface{}, actual interface{}) bool {
+func IsEqual(expected any, actual any) bool {
 	if expected == nil || actual == nil {
 		return expected == actual
 	}
@@ -105,7 +52,7 @@ func IsEqual(expected interface{}, actual interface{}) bool {
 }
 
 // HasEqualValues checks if two objects have equal values.
-func HasEqualValues(expected interface{}, actual interface{}) bool {
+func HasEqualValues(expected any, actual any) bool {
 	if IsEqual(expected, actual) {
 		return true
 	}
@@ -123,22 +70,8 @@ func HasEqualValues(expected interface{}, actual interface{}) bool {
 	return false
 }
 
-// DoesImplement checks if an objects implements an interface.
-func DoesImplement(interfaceObject, object interface{}) bool {
-	interfaceType := reflect.TypeOf(interfaceObject).Elem()
-
-	if object == nil {
-		return false
-	}
-	if !reflect.TypeOf(object).Implements(interfaceType) {
-		return false
-	}
-
-	return true
-}
-
 // DoesContain checks that ab objects contains an element.
-func DoesContain(object, element interface{}) bool {
+func DoesContain(object, element any) bool {
 	objectValue := reflect.ValueOf(object)
 	objectKind := reflect.TypeOf(object).Kind()
 
@@ -158,7 +91,7 @@ func DoesContain(object, element interface{}) bool {
 }
 
 // AssertCompareHelper option: 1 = increasing, 0 = equal, -1 = decreasing
-func AssertCompareHelper(t testRunner, object interface{}, option int, msg ...interface{}) {
+func AssertCompareHelper(t testRunner, object any, option int, msg ...any) {
 	if test, ok := t.(helper); ok {
 		test.Helper()
 	}
@@ -238,7 +171,11 @@ func AssertCompareHelper(t testRunner, object interface{}, option int, msg ...in
 	}
 }
 
-func AssertRegexpHelper(t testRunner, regex interface{}, txt interface{}, shouldMatch bool, msg ...interface{}) {
+func AssertRegexpHelper(t testRunner, regex any, txt any, shouldMatch bool, msg ...any) {
+	if test, ok := t.(helper); ok {
+		test.Helper()
+	}
+
 	regexString := fmt.Sprint(regex)
 	txtString := fmt.Sprint(txt)
 	match, _ := regexp.MatchString(regexString, txtString)
@@ -248,29 +185,24 @@ func AssertRegexpHelper(t testRunner, regex interface{}, txt interface{}, should
 			failText = "!!does match!! the string, but !!should not!!."
 		}
 		Fail(t, "The regex pattern "+failText, Objects{
-			{
-				Name:      "Regex Pattern",
-				NameStyle: pterm.NewStyle(pterm.FgRed),
-				Data:      regexString + "\n",
-				DataStyle: pterm.NewStyle(pterm.FgRed),
-				Raw:       true,
-			},
-			{
-				Name:      "String",
-				NameStyle: pterm.NewStyle(pterm.FgRed),
-				Data:      txtString + "\n",
-				DataStyle: pterm.NewStyle(pterm.FgRed),
-				Raw:       true,
-			},
+			NewObjectsSingleNamed("Regex Pattern", regexString+"\n")[0],
+			NewObjectsSingleNamed("String", txtString+"\n")[0],
 		}, msg...)
 	}
 }
 
 // AssertDirEmptyHelper checks for io.EOF to determine if directory empty or not
 func AssertDirEmptyHelper(t testRunner, dir string) bool {
+	if test, ok := t.(helper); ok {
+		test.Helper()
+	}
+
 	f, err := os.Open(dir)
 	if err != nil {
-		Fail(t, "Error opening directory specified", NewObjectsSingleNamed("dir", dir))
+		if errors.Is(err, os.ErrNotExist) {
+			return true
+		}
+		Fail(t, "Error opening directory specified", NewObjectsSingleNamed("dir", dir), err.Error())
 	}
 	defer f.Close()
 
@@ -278,7 +210,7 @@ func AssertDirEmptyHelper(t testRunner, dir string) bool {
 	return errors.Is(err, io.EOF)
 }
 
-func IsList(list interface{}) bool {
+func IsList(list any) bool {
 	kind := reflect.TypeOf(list).Kind()
 	if kind != reflect.Array && kind != reflect.Slice {
 		return false
@@ -287,8 +219,8 @@ func IsList(list interface{}) bool {
 	return true
 }
 
-func HasSameElements(expected interface{}, actual interface{}) bool {
-	if IsNil(expected) || IsNil(actual) {
+func HasSameElements(expected any, actual any) bool {
+	if assert.Nil(expected) || assert.Nil(actual) {
 		return expected == actual
 	}
 
@@ -304,7 +236,7 @@ func HasSameElements(expected interface{}, actual interface{}) bool {
 
 	visited := make([]bool, actualLen)
 
-	var extraA, extraB []interface{}
+	var extraA, extraB []any
 	for i := 0; i < expectedLen; i++ {
 		element := expectedValue.Index(i).Interface()
 		found := false
@@ -337,8 +269,12 @@ func HasSameElements(expected interface{}, actual interface{}) bool {
 	return false
 }
 
-func IsSubset(t testRunner, list interface{}, subset interface{}) bool {
-	if IsNil(subset) {
+func IsSubset(t testRunner, list any, subset any) bool {
+	if test, ok := t.(helper); ok {
+		test.Helper()
+	}
+
+	if assert.Nil(subset) {
 		return true
 	}
 

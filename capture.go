@@ -3,7 +3,6 @@ package testza
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 )
 
@@ -11,13 +10,14 @@ import (
 // You can use this method in tests, to validate that your functions writes a string to the terminal.
 //
 // Example:
-//  stdout, err := testza.CaptureStdout(func(w io.Writer) error {
-//  	fmt.Println("Hello, World!")
-//  	return nil
-//  })
 //
-//  testza.AssertNoError(t, err)
-//  testza.AssertEqual(t, "Hello, World!", stdout)
+//	stdout, err := testza.CaptureStdout(func(w io.Writer) error {
+//		fmt.Println("Hello, World!")
+//		return nil
+//	})
+//
+//	testza.AssertNoError(t, err)
+//	testza.AssertEqual(t, "Hello, World!", stdout)
 func CaptureStdout(capture func(w io.Writer) error) (string, error) {
 	originalStdout := os.Stdout
 	r, w, err := os.Pipe()
@@ -35,7 +35,7 @@ func CaptureStdout(capture func(w io.Writer) error) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not capture stdout: %w", err)
 	}
-	out, err := ioutil.ReadAll(r)
+	out, err := io.ReadAll(r)
 	if err != nil {
 		return "", fmt.Errorf("could not capture stdout: %w", err)
 	}
@@ -52,14 +52,15 @@ func CaptureStdout(capture func(w io.Writer) error) (string, error) {
 // You can use this method in tests, to validate that your functions writes a string to the terminal.
 //
 // Example:
-//  stderr, err := testza.CaptureStderr(func(w io.Writer) error {
-//  	_, err := fmt.Fprint(os.Stderr, "Hello, World!")
-//  	testza.AssertNoError(t, err)
-//  	return nil
-//  })
 //
-//  testza.AssertNoError(t, err)
-//  testza.AssertEqual(t, "Hello, World!", stderr)
+//	stderr, err := testza.CaptureStderr(func(w io.Writer) error {
+//		_, err := fmt.Fprint(os.Stderr, "Hello, World!")
+//		testza.AssertNoError(t, err)
+//		return nil
+//	})
+//
+//	testza.AssertNoError(t, err)
+//	testza.AssertEqual(t, "Hello, World!", stderr)
 func CaptureStderr(capture func(w io.Writer) error) (string, error) {
 	originalStderr := os.Stderr
 	r, w, err := os.Pipe()
@@ -77,7 +78,7 @@ func CaptureStderr(capture func(w io.Writer) error) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not capture stderr: %w", err)
 	}
-	out, err := ioutil.ReadAll(r)
+	out, err := io.ReadAll(r)
 	if err != nil {
 		return "", fmt.Errorf("could not capture stderr: %w", err)
 	}
@@ -94,15 +95,16 @@ func CaptureStderr(capture func(w io.Writer) error) (string, error) {
 // You can use this method in tests, to validate that your functions writes a string to the terminal.
 //
 // Example:
-//  stdout, stderr, err := testza.CaptureStdoutAndStderr(func(stdoutWriter, stderrWriter io.Writer) error {
-//  	fmt.Fprint(os.Stdout, "Hello")
-//  	fmt.Fprint(os.Stderr, "World")
-//  	return nil
-//  })
 //
-//  testza.AssertNoError(t, err)
-//  testza.AssertEqual(t, "Hello", stdout)
-//  testza.AssertEqual(t, "World", stderr)
+//	stdout, stderr, err := testza.CaptureStdoutAndStderr(func(stdoutWriter, stderrWriter io.Writer) error {
+//		fmt.Fprint(os.Stdout, "Hello")
+//		fmt.Fprint(os.Stderr, "World")
+//		return nil
+//	})
+//
+//	testza.AssertNoError(t, err)
+//	testza.AssertEqual(t, "Hello", stdout)
+//	testza.AssertEqual(t, "World", stderr)
 func CaptureStdoutAndStderr(capture func(stdoutWriter, stderrWriter io.Writer) error) (stdout, stderr string, err error) {
 	originalStdout := os.Stdout
 	originalStderr := os.Stderr
@@ -135,12 +137,12 @@ func CaptureStdoutAndStderr(capture func(stdoutWriter, stderrWriter io.Writer) e
 		return "", "", fmt.Errorf("could not capture stdout or stderr: %w", err)
 	}
 
-	stdoutOut, err := ioutil.ReadAll(stdoutR)
+	stdoutOut, err := io.ReadAll(stdoutR)
 	if err != nil {
 		return "", "", fmt.Errorf("could not capture stdout or stderr: %w", err)
 	}
 
-	stderrOut, err := ioutil.ReadAll(stderrR)
+	stderrOut, err := io.ReadAll(stderrR)
 	if err != nil {
 		return "", "", fmt.Errorf("could not capture stdout or stderr: %w", err)
 	}

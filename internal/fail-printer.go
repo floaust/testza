@@ -13,14 +13,14 @@ var Highlight = pterm.NewStyle(pterm.FgLightRed).Sprint
 type Object struct {
 	Name      string
 	NameStyle *pterm.Style
-	Data      interface{}
+	Data      any
 	DataStyle *pterm.Style
 	Raw       bool
 }
 
 type Objects []Object
 
-func NewObjectsExpectedActual(expected, actual interface{}) Objects {
+func NewObjectsExpectedActual(expected, actual any) Objects {
 	return Objects{
 		{
 			Name:      "Expected",
@@ -37,7 +37,25 @@ func NewObjectsExpectedActual(expected, actual interface{}) Objects {
 	}
 }
 
-func NewObjectsUnknown(objs ...interface{}) Objects {
+func NewObjectsExpectedActualWithDiff(expected, actual any) Objects {
+	return Objects{
+		{
+			Name:      "Expected",
+			NameStyle: pterm.NewStyle(pterm.FgLightGreen),
+			Data:      expected,
+			DataStyle: pterm.NewStyle(pterm.FgGreen),
+		},
+		{
+			Name:      "Actual",
+			NameStyle: pterm.NewStyle(pterm.FgLightRed),
+			Data:      actual,
+			DataStyle: pterm.NewStyle(pterm.FgRed),
+		},
+		NewDiffObject(expected, actual),
+	}
+}
+
+func NewObjectsUnknown(objs ...any) Objects {
 	return Objects{
 		{
 			Name:      "Object",
@@ -47,21 +65,22 @@ func NewObjectsUnknown(objs ...interface{}) Objects {
 	}
 }
 
-func NewObjectsSingleUnknown(obj interface{}) Objects {
+func NewObjectsSingleUnknown(obj any) Objects {
 	return Objects{
 		{
 			Name:      "Object",
+			NameStyle: pterm.NewStyle(pterm.FgMagenta),
 			Data:      obj,
-			DataStyle: pterm.NewStyle(pterm.FgYellow),
 		},
 	}
 }
 
-func NewObjectsSingleNamed(name string, obj interface{}) Objects {
+func NewObjectsSingleNamed(name string, obj any) Objects {
 	return Objects{
 		{
-			Name: name,
-			Data: obj,
+			Name:      name,
+			NameStyle: pterm.NewStyle(pterm.FgMagenta),
+			Data:      obj,
 		},
 	}
 }
@@ -76,29 +95,17 @@ func ModifyWrappedText(text, wrappingString string, modifier func(wrappedText st
 	return strings.ReplaceAll(res, wrappingString, "")
 }
 
-func FailS(message string, objects Objects, args ...interface{}) string {
+func FailS(message string, objects Objects, args ...any) string {
 	message = ModifyWrappedText(message, "!!", func(wrappedText string) string {
 		return Highlight(wrappedText)
 	})
 
-	message = pterm.Sprint(args...) + "\n" + message
+	if len(args) > 0 {
+		message += "\n\n" + pterm.FgMagenta.Sprint("Message: ") + pterm.Sprintf(pterm.Sprint(args[0]), args[1:]...) + "\n"
+	}
 
 	if !strings.HasSuffix(message, "\n") {
 		message += "\n"
-	}
-
-	if len(objects) == 2 {
-
-		if strings.Count(spew.Sdump(objects[0].Data), "\n")+strings.Count(spew.Sdump(objects[1].Data), "\n") > 4 &&
-			objects[0].Name == "Expected" &&
-			objects[1].Name == "Actual" {
-			objects = append(Objects{{
-				Name:      "Difference",
-				NameStyle: pterm.NewStyle(pterm.FgYellow),
-				Data:      GetDifference(objects[0].Data, objects[1].Data),
-				Raw:       true,
-			}}, objects...)
-		}
 	}
 
 	for i, v := range objects {
@@ -123,12 +130,13 @@ func FailS(message string, objects Objects, args ...interface{}) string {
 		}
 	}
 
+	// Prepend line numbers
 	newMessage := "\n"
 	lines := strings.Split(message, "\n")
 	for i, line := range lines {
-		if i > 0 && i < len(lines)-1 {
+		if !(i == 0 && strings.TrimSpace(line) == "") && i < len(lines)-1 {
 			if LineNumbersEnabled {
-				newMessage += pterm.FgGray.Sprintf("%4d| ", i) + line + "\n" + pterm.Reset.Sprint()
+				newMessage += pterm.FgGray.Sprintf("%4d| ", i+1) + line + "\n" + pterm.Reset.Sprint()
 			} else {
 				newMessage += line + "\n"
 			}
@@ -139,7 +147,7 @@ func FailS(message string, objects Objects, args ...interface{}) string {
 	return message
 }
 
-func Fail(t testRunner, message string, objects Objects, args ...interface{}) {
+func Fail(t testRunner, message string, objects Objects, args ...any) {
 	if test, ok := t.(helper); ok {
 		test.Helper()
 	}

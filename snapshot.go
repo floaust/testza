@@ -2,9 +2,10 @@ package testza
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/MarvinJWendt/testza/internal"
@@ -19,26 +20,24 @@ import (
 // NOTICE: \r\n will be replaced with \n to make the files consistent between operating systems.
 //
 // Example:
-//  testza.SnapshotCreate(t.Name(), objectToBeSnapshotted)
-func SnapshotCreate(name string, snapshotObject interface{}) error {
+//
+//	testza.SnapshotCreate(t.Name(), objectToBeSnapshotted)
+func SnapshotCreate(name string, snapshotObject any) error {
 	dir := getCurrentScriptDirectory() + "/testdata/snapshots/"
 	return snapshotCreateForDir(dir, name, snapshotObject)
 }
 
-func snapshotCreateForDir(dir string, name string, snapshotObject interface{}) error {
+func snapshotCreateForDir(dir string, name string, snapshotObject any) error {
 	err := os.MkdirAll(dir, 0755)
 	if err != nil {
 		return fmt.Errorf("creating snapshot failed: %w", err)
 	}
 
-	originalSpewConfig := spew.Config.DisablePointerAddresses
-	spew.Config.DisablePointerAddresses = true
-	dump := strings.ReplaceAll(spew.Sdump(snapshotObject), "\r\n", "\n")
-	err = ioutil.WriteFile(path.Clean(dir+name+".testza"), []byte(dump), 0755)
+	dump := strings.ReplaceAll(createSnapshotText(snapshotObject), "\r\n", "\n")
+	err = os.WriteFile(path.Clean(dir+name+".testza"), []byte(dump), 0755)
 	if err != nil {
 		return fmt.Errorf("creating snapshot failed: %w", err)
 	}
-	spew.Config.DisablePointerAddresses = originalSpewConfig
 
 	return nil
 }
@@ -49,35 +48,47 @@ func snapshotCreateForDir(dir string, name string, snapshotObject interface{}) e
 // NOTICE: \r\n will be replaced with \n to make the files consistent between operating systems.
 //
 // Example:
-//  testza.SnapshotValidate(t, t.Name(), objectToBeValidated)
-//  testza.SnapshotValidate(t, t.Name(), objectToBeValidated, "Optional message")
-func SnapshotValidate(t testRunner, name string, actual interface{}, msg ...interface{}) error {
+//
+//	testza.SnapshotValidate(t, t.Name(), objectToBeValidated)
+//	testza.SnapshotValidate(t, t.Name(), objectToBeValidated, "Optional message")
+func SnapshotValidate(t testRunner, name string, actual any, msg ...any) error {
 	dir := getCurrentScriptDirectory() + "/testdata/snapshots/"
 	return snapshotValidateFromDir(dir, t, name, actual, msg...)
 }
 
-func snapshotValidateFromDir(dir string, t testRunner, name string, actual interface{}, msg ...interface{}) error {
+var snapshotStringMatcher = regexp.MustCompile(`(?m)^\(.+?\)\s\(len=\d+\)\s(".+")$`)
+
+func snapshotValidateFromDir(dir string, t testRunner, name string, actual any, msg ...any) error {
 	snapshotPath := path.Clean(dir + name + ".testza")
-	snapshotContent, err := ioutil.ReadFile(snapshotPath)
-	snapshot := strings.ReplaceAll(string(snapshotContent), "\r\n", "\n")
+	snapshotContent, err := os.ReadFile(snapshotPath)
 	if err != nil {
 		return fmt.Errorf("validating snapshot failed: %w", err)
 	}
-	originalSpewConfig := spew.Config.DisablePointerAddresses
-	spew.Config.DisablePointerAddresses = true
+	snapshot := strings.ReplaceAll(string(snapshotContent), "\r\n", "\n")
 
-	if spew.Sdump(actual) != snapshot {
+	actualSnapshot := createSnapshotText(actual)
+
+	if actualSnapshot != snapshot {
+		var diffObject *internal.Object
+		if strActual, ok := actual.(string); ok {
+			if match := snapshotStringMatcher.FindStringSubmatch(snapshot); len(match) > 0 {
+				if unquoted, err := strconv.Unquote(match[1]); err == nil {
+					object := internal.NewDiffObject(unquoted, strActual, true)
+					diffObject = &object
+				}
+			}
+		}
+
+		if diffObject == nil {
+			object := internal.NewDiffObject(snapshot, actualSnapshot, true)
+			diffObject = &object
+		}
+
 		internal.Fail(t,
 			generateMsg(msg,
 				fmt.Sprintf("Snapshot '%s' failed to validate", name)),
 			internal.Objects{
-				{
-					Name:      "Difference",
-					NameStyle: pterm.NewStyle(pterm.FgLightYellow),
-					Data:      internal.GetDifference(snapshot, spew.Sdump(actual), true),
-					DataStyle: pterm.NewStyle(pterm.FgGreen),
-					Raw:       true,
-				},
+				*diffObject,
 				{
 					Name:      "Expected",
 					NameStyle: pterm.NewStyle(pterm.FgLightGreen),
@@ -88,14 +99,12 @@ func snapshotValidateFromDir(dir string, t testRunner, name string, actual inter
 				{
 					Name:      "Actual",
 					NameStyle: pterm.NewStyle(pterm.FgLightRed),
-					Data:      spew.Sdump(actual),
+					Data:      actualSnapshot,
 					DataStyle: pterm.NewStyle(pterm.FgRed),
 					Raw:       true,
 				},
 			})
 	}
-
-	spew.Config.DisablePointerAddresses = originalSpewConfig
 
 	return nil
 }
@@ -109,11 +118,18 @@ func snapshotValidateFromDir(dir string, t testRunner, name string, actual inter
 // NOTICE: \r\n will be replaced with \n to make the files consistent between operating systems.
 //
 // Example:
-//  testza.SnapshotCreateOrValidate(t, t.Name(), object)
-//  testza.SnapshotCreateOrValidate(t, t.Name(), object, "Optional Message")
-func SnapshotCreateOrValidate(t testRunner, name string, object interface{}, msg ...interface{}) error {
+//
+//	testza.SnapshotCreateOrValidate(t, t.Name(), object)
+//	testza.SnapshotCreateOrValidate(t, t.Name(), object, "Optional Message")
+func SnapshotCreateOrValidate(t testRunner, name string, object any, msg ...any) error {
 	dir := getCurrentScriptDirectory() + "/testdata/snapshots/"
 	snapshotPath := path.Clean(dir + name + ".testza")
+	if strings.Contains(name, "/") {
+		err := os.MkdirAll(path.Dir(snapshotPath), 0755)
+		if err != nil {
+			return fmt.Errorf("creating snapshot directories failed: %w", err)
+		}
+	}
 
 	if _, err := os.Stat(snapshotPath); err == nil {
 		err = snapshotValidateFromDir(dir, t, name, object, msg...)
@@ -130,4 +146,14 @@ func SnapshotCreateOrValidate(t testRunner, name string, object interface{}, msg
 	}
 
 	return nil
+}
+
+func createSnapshotText(object any) string {
+	cfg := spew.NewDefaultConfig()
+
+	cfg.DisablePointerAddresses = true
+	cfg.DisableCapacities = true
+	cfg.SortKeys = true
+
+	return cfg.Sdump(object)
 }

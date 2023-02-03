@@ -1,6 +1,68 @@
 <a name="unreleased"></a>
 ## [Unreleased]
 
+
+<a name="v0.4.1"></a>
+## [v0.4.1] - 2022-04-10
+
+<a name="v0.4.0"></a>
+## [v0.4.0] - 2022-04-10
+
+<a name="v0.3.5"></a>
+## [v0.3.5] - 2022-04-07
+
+<a name="v0.3.4"></a>
+## [v0.3.4] - 2022-04-07
+
+<a name="v0.3.3"></a>
+## [v0.3.3] - 2022-04-05
+### Bug Fixes
+- correct file perms on nested snapshot dir
+
+
+<a name="v0.3.2"></a>
+## [v0.3.2] - 2022-03-31
+### Features
+- parse snapshots with regex if they are strings fix: conditional diff rendering fix: hide long common diff lines
+- rich difference detection
+
+### Bug Fixes
+- show 0 context if specified
+- move diff to last object slot chore: rename context line count variable
+- correctly handle newlines in diffs
+- conditional diff buffer flushing
+
+
+<a name="v0.3.1"></a>
+## [v0.3.1] - 2022-03-21
+### Features
+- added better styling for `AssertNoError`
+
+### Bug Fixes
+- fixed `AssertDirEmpty` failing when dir does not exist
+
+
+<a name="v0.3.0"></a>
+## [v0.3.0] - 2022-03-20
+### Features
+- print custom messages
+
+### Bug Fixes
+- fixed nested snapshots
+
+### Test
+- added output consistency tests for failed assertions
+
+### Code Refactoring
+- renamed `Mock` to `Fuzz`
+
+### BREAKING CHANGE
+
+Adapting to this breaking change is easily done by replacing all occurrences of `testza.Mock` with `testza.Fuzz`
+
+
+<a name="v0.2.15"></a>
+## [v0.2.15] - 2022-02-14
 ### Features
 - **configure:** Added option to disable the startup message
 
@@ -248,7 +310,16 @@ Functions have a new structure.
 - **internal:** rewrite `Fail` for a nicer output
 
 
-[Unreleased]: https://github.com/MarvinJWendt/testza/compare/v0.2.14...HEAD
+[Unreleased]: https://github.com/MarvinJWendt/testza/compare/v0.4.1...HEAD
+[v0.4.1]: https://github.com/MarvinJWendt/testza/compare/v0.4.0...v0.4.1
+[v0.4.0]: https://github.com/MarvinJWendt/testza/compare/v0.3.5...v0.4.0
+[v0.3.5]: https://github.com/MarvinJWendt/testza/compare/v0.3.4...v0.3.5
+[v0.3.4]: https://github.com/MarvinJWendt/testza/compare/v0.3.3...v0.3.4
+[v0.3.3]: https://github.com/MarvinJWendt/testza/compare/v0.3.2...v0.3.3
+[v0.3.2]: https://github.com/MarvinJWendt/testza/compare/v0.3.1...v0.3.2
+[v0.3.1]: https://github.com/MarvinJWendt/testza/compare/v0.3.0...v0.3.1
+[v0.3.0]: https://github.com/MarvinJWendt/testza/compare/v0.2.15...v0.3.0
+[v0.2.15]: https://github.com/MarvinJWendt/testza/compare/v0.2.14...v0.2.15
 [v0.2.14]: https://github.com/MarvinJWendt/testza/compare/v0.2.13...v0.2.14
 [v0.2.13]: https://github.com/MarvinJWendt/testza/compare/v0.2.12...v0.2.13
 [v0.2.12]: https://github.com/MarvinJWendt/testza/compare/v0.2.11...v0.2.12

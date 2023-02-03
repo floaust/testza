@@ -9,6 +9,8 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +18,45 @@ import (
 
 	. "github.com/MarvinJWendt/testza"
 )
+
+type testMock struct {
+	ErrorCalled  bool
+	ErrorMessage string
+}
+
+func (m *testMock) fail(msg ...any) {
+	m.ErrorCalled = true
+	m.ErrorMessage = fmt.Sprint(msg...)
+}
+
+func (m *testMock) Error(args ...any) {
+	m.fail(args...)
+}
+
+// Errorf is a mock of testing.T.
+func (m *testMock) Errorf(format string, args ...any) {
+	m.fail(fmt.Sprintf(format, args...))
+}
+
+// Fail is a mock of testing.T.
+func (m *testMock) Fail() {
+	m.fail()
+}
+
+// FailNow is a mock of testing.T.
+func (m *testMock) FailNow() {
+	m.fail()
+}
+
+// Fatal is a mock of testing.T.
+func (m *testMock) Fatal(args ...any) {
+	m.fail(args...)
+}
+
+// Fatalf is a mock of testing.T.
+func (m *testMock) Fatalf(format string, args ...any) {
+	m.fail(fmt.Sprintf(format, args...))
+}
 
 type assertionTestStruct struct {
 	Name string
@@ -29,7 +70,7 @@ type assertionTestStructNested struct {
 }
 
 func randomString() string {
-	return MockInputStringGenerateRandom(1, rand.Intn(10))[0]
+	return FuzzStringGenerateRandom(1, rand.Intn(10))[0]
 }
 
 func generateStruct() (ret assertionTestStruct) {
@@ -41,7 +82,7 @@ func generateStruct() (ret assertionTestStruct) {
 	return
 }
 
-func testEqual(t *testing.T, expected, actual interface{}) {
+func testEqual(t *testing.T, expected, actual any) {
 	t.Helper()
 
 	t.Run("Equal", func(t *testing.T) {
@@ -60,7 +101,7 @@ func testEqual(t *testing.T, expected, actual interface{}) {
 func TestAssertKindOf(t *testing.T) {
 	tests := []struct {
 		kind  reflect.Kind
-		value interface{}
+		value any
 	}{
 		{kind: reflect.String, value: "Hello, World!"},
 		{kind: reflect.Int, value: 1337},
@@ -86,7 +127,7 @@ func TestAssertKindOf(t *testing.T) {
 func TestAssertKindOf_fails(t *testing.T) {
 	tests := []struct {
 		kind  reflect.Kind
-		value interface{}
+		value any
 	}{
 		{kind: reflect.Int, value: "Hello, World!"},
 		{kind: reflect.Bool, value: 1337},
@@ -114,7 +155,7 @@ func TestAssertKindOf_fails(t *testing.T) {
 func TestAssertNotKindOf(t *testing.T) {
 	tests := []struct {
 		kind  reflect.Kind
-		value interface{}
+		value any
 	}{
 		{kind: reflect.Int, value: "Hello, World!"},
 		{kind: reflect.Bool, value: 1337},
@@ -140,7 +181,7 @@ func TestAssertNotKindOf(t *testing.T) {
 func TestAssertNotKindOf_fails(t *testing.T) {
 	tests := []struct {
 		kind  reflect.Kind
-		value interface{}
+		value any
 	}{
 		{kind: reflect.String, value: "Hello, World!"},
 		{kind: reflect.Int, value: 1337},
@@ -166,7 +207,7 @@ func TestAssertNotKindOf_fails(t *testing.T) {
 }
 
 func TestAssertNumeric(t *testing.T) {
-	var numbers []interface{}
+	var numbers []any
 
 	for i := 0; i < 10; i++ {
 		numbers = append(numbers,
@@ -197,7 +238,7 @@ func TestAssertNumeric(t *testing.T) {
 }
 
 func TestAssertNumeric_fails(t *testing.T) {
-	noNumbers := []interface{}{"Hello, World!", true, false}
+	noNumbers := []any{"Hello, World!", true, false}
 	for _, number := range noNumbers {
 		t.Run(pterm.Sprintf("Type=%s;Value=%#v", reflect.TypeOf(number).Kind().String(), number), func(t *testing.T) {
 			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
@@ -208,7 +249,7 @@ func TestAssertNumeric_fails(t *testing.T) {
 }
 
 func TestAssertNotNumeric_fails(t *testing.T) {
-	var numbers []interface{}
+	var numbers []any
 
 	for i := 0; i < 10; i++ {
 		numbers = append(numbers,
@@ -241,7 +282,7 @@ func TestAssertNotNumeric_fails(t *testing.T) {
 }
 
 func TestAssertZero(t *testing.T) {
-	var zeroValues []interface{}
+	var zeroValues []any
 	zeroValues = append(zeroValues, 0, "", false, nil)
 
 	for i, value := range zeroValues {
@@ -252,10 +293,10 @@ func TestAssertZero(t *testing.T) {
 }
 
 func TestAssertZero_fails(t *testing.T) {
-	var zeroValues []interface{}
-	zeroValues = append(zeroValues, true, "asd", 123, 1.5, 'a')
+	var nonZeroValues []any
+	nonZeroValues = append(nonZeroValues, true, "asd", 123, 1.5, 'a')
 
-	for i, value := range zeroValues {
+	for i, value := range nonZeroValues {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
 				AssertZero(t, value)
@@ -265,10 +306,10 @@ func TestAssertZero_fails(t *testing.T) {
 }
 
 func TestAssertNotZero(t *testing.T) {
-	var zeroValues []interface{}
-	zeroValues = append(zeroValues, true, "asd", 123, 1.5, 'a')
+	var nonZeroValues []any
+	nonZeroValues = append(nonZeroValues, true, "asd", 123, 1.5, 'a')
 
-	for i, value := range zeroValues {
+	for i, value := range nonZeroValues {
 		t.Run(fmt.Sprint(i), func(t *testing.T) {
 			AssertNotZero(t, value)
 		})
@@ -276,7 +317,7 @@ func TestAssertNotZero(t *testing.T) {
 }
 
 func TestAssertNotZero_fails(t *testing.T) {
-	var zeroValues []interface{}
+	var zeroValues []any
 	zeroValues = append(zeroValues, 0, "", false, nil)
 
 	for i, value := range zeroValues {
@@ -290,7 +331,7 @@ func TestAssertNotZero_fails(t *testing.T) {
 
 func TestAssertEqual(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			t.Helper()
 
 			testEqual(t, str, str)
@@ -323,7 +364,7 @@ func TestAssertEqual(t *testing.T) {
 
 func TestAssertEqual_fails(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
 				AssertEqual(t, str, str+" addon")
 			})
@@ -352,7 +393,7 @@ func TestAssertEqual_fails(t *testing.T) {
 
 func TestAssertNotEqual(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			AssertNotEqual(t, str, str+" addon")
 		})
 	})
@@ -375,7 +416,7 @@ func TestAssertNotEqual(t *testing.T) {
 
 func TestAssertNotEqual_fails(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			t.Helper()
 
 			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
@@ -418,7 +459,7 @@ func TestAssertNotEqual_fails(t *testing.T) {
 
 func TestAssertEqualValues(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			AssertEqualValues(t, str, str)
 		})
 	})
@@ -426,7 +467,7 @@ func TestAssertEqualValues(t *testing.T) {
 
 func TestAssertEqualValues_fails(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
 				AssertEqualValues(t, str, str+" addon")
 			})
@@ -436,7 +477,7 @@ func TestAssertEqualValues_fails(t *testing.T) {
 
 func TestAssertNotEqualValues(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			AssertNotEqualValues(t, str, str+" addon")
 		})
 	})
@@ -444,7 +485,7 @@ func TestAssertNotEqualValues(t *testing.T) {
 
 func TestAssertNotEqualValues_fails(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
 				AssertNotEqualValues(t, str, str)
 			})
@@ -501,17 +542,39 @@ func TestAssertNotImplements_fails(t *testing.T) {
 }
 
 func TestAssertContains(t *testing.T) {
-	s := []string{"Hello", "World"}
-
-	AssertContains(t, s, "World")
+	tests := []struct {
+		name     string
+		obj      interface{}
+		contains interface{}
+	}{
+		{name: "String Slice", obj: []string{"Hello", "World", "!"}, contains: "World"},
+		{name: "Int Slice", obj: []int{1, 2, 3, 4, 5, 6, 7, 8}, contains: 4},
+		{name: "String", obj: "Hello, World!", contains: "World"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			AssertContains(t, test.obj, test.contains)
+		})
+	}
 }
 
 func TestAssertContains_fails(t *testing.T) {
-	s := []string{"Hello", "World"}
-
-	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
-		AssertContains(t, s, "asdasd")
-	})
+	tests := []struct {
+		name     string
+		obj      interface{}
+		contains interface{}
+	}{
+		{name: "String Slice", obj: []string{"Hello", "World", "!"}, contains: "asdasdasd"},
+		{name: "Int Slice", obj: []int{1, 2, 3, 4, 5, 6, 7, 8}, contains: 1337},
+		{name: "String", obj: "Hello, World!", contains: "asdasdasd"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+				AssertContains(t, test.obj, test.contains)
+			})
+		})
+	}
 }
 
 func TestAssertNotContains(t *testing.T) {
@@ -566,7 +629,7 @@ func TestAssertNil_pointer(t *testing.T) {
 
 func TestAssertNil_interface(t *testing.T) {
 	var i *int = nil
-	var a interface{} = i
+	var a any = i
 	AssertNil(t, a)
 }
 
@@ -576,7 +639,7 @@ func TestAssertNil_pointer_struct(t *testing.T) {
 }
 
 func TestAssertNil_fails(t *testing.T) {
-	objectsNotNil := []interface{}{"asd", 0, false, true, 'c', "", []int{1, 2, 3}}
+	objectsNotNil := []any{"asd", 0, false, true, 'c', "", []int{1, 2, 3}}
 
 	for _, v := range objectsNotNil {
 		t.Run(pterm.Sprintf("Value=%#v", v), func(t *testing.T) {
@@ -588,7 +651,7 @@ func TestAssertNil_fails(t *testing.T) {
 }
 
 func TestAssertNotNil(t *testing.T) {
-	objectsNotNil := []interface{}{"asd", 0, false, true, 'c', "", []int{1, 2, 3}}
+	objectsNotNil := []any{"asd", 0, false, true, 'c', "", []int{1, 2, 3}}
 
 	for _, v := range objectsNotNil {
 		t.Run(pterm.Sprintf("Value=%#v", v), func(t *testing.T) {
@@ -619,7 +682,7 @@ func TestAssertCompletesIn_fails(t *testing.T) {
 
 func TestAssertNotCompletesIn(t *testing.T) {
 	AssertNotCompletesIn(t, 10*time.Microsecond, func() {
-		time.Sleep(15 * time.Millisecond)
+		time.Sleep(20 * time.Millisecond)
 	})
 }
 
@@ -654,6 +717,26 @@ func TestAssertGreater_fails(t *testing.T) {
 	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
 		AssertGreater(t, 4, 5)
 	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertGreater(t, 5, 5)
+	})
+}
+
+func TestAssertGreaterOrEqual(t *testing.T) {
+	AssertGreaterOrEqual(t, 2, 1)
+	AssertGreaterOrEqual(t, 5, 4)
+	AssertGreaterOrEqual(t, 5, 5)
+}
+
+func TestAssertGreaterOrEqual_fails(t *testing.T) {
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertGreaterOrEqual(t, 1, 2)
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertGreaterOrEqual(t, 4, 5)
+	})
 }
 
 func TestAssertLess(t *testing.T) {
@@ -668,6 +751,26 @@ func TestAssertLess_fails(t *testing.T) {
 
 	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
 		AssertLess(t, 5, 4)
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertLess(t, 5, 5)
+	})
+}
+
+func TestAssertLessOrEqual(t *testing.T) {
+	AssertLessOrEqual(t, 1, 2)
+	AssertLessOrEqual(t, 4, 5)
+	AssertLessOrEqual(t, 5, 5)
+}
+
+func TestAssertLessOrEqual_fails(t *testing.T) {
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertLessOrEqual(t, 2, 1)
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertLessOrEqual(t, 5, 4)
 	})
 }
 
@@ -755,7 +858,7 @@ func TestAssertNotErrorIs_fails(t *testing.T) {
 
 func TestAssertLen(t *testing.T) {
 	tests := []struct {
-		object interface{}
+		object any
 		expLen int
 	}{
 		{object: "", expLen: 0},
@@ -774,7 +877,7 @@ func TestAssertLen(t *testing.T) {
 
 func TestAssertLen_fails(t *testing.T) {
 	tests := []struct {
-		object interface{}
+		object any
 		expLen int
 	}{
 		{object: "", expLen: 1},
@@ -786,7 +889,7 @@ func TestAssertLen_fails(t *testing.T) {
 		{object: 1, expLen: 4},
 		{object: 0.1, expLen: 4},
 		{object: generateStruct(), expLen: 1},
-		{object: interface{}(nil), expLen: 1},
+		{object: any(nil), expLen: 1},
 		{object: true, expLen: 0},
 		{object: uint(137), expLen: 0},
 	}
@@ -800,7 +903,7 @@ func TestAssertLen_fails(t *testing.T) {
 }
 
 func TestAssertLen_full(t *testing.T) {
-	MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+	FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 		AssertLen(t, str, len(str))
 	})
 }
@@ -808,7 +911,7 @@ func TestAssertLen_full(t *testing.T) {
 func TestAssertIsIncreasing(t *testing.T) {
 	tests := []struct {
 		name   string
-		object interface{}
+		object any
 	}{
 		{name: "int", object: []int{1, 2, 3, 4, 5, 6}},
 		{name: "int2", object: []int{1, 7, 10, 11, 134, 700432}},
@@ -835,7 +938,7 @@ func TestAssertIsIncreasing(t *testing.T) {
 func TestAssertIsIncreasing_fail(t *testing.T) {
 	tests := []struct {
 		name   string
-		object interface{}
+		object any
 	}{
 		{name: "int_empty", object: []int{}},
 		{name: "int_one", object: []int{4}},
@@ -869,7 +972,7 @@ func TestAssertIsIncreasing_fail(t *testing.T) {
 func TestAssertIsDecreasing(t *testing.T) {
 	tests := []struct {
 		name   string
-		object interface{}
+		object any
 	}{
 		{name: "int", object: []int{6, 5, 4, 3, 2, 1}},
 		{name: "int2", object: []int{700432, 134, 11, 10, 7, 1}},
@@ -896,7 +999,7 @@ func TestAssertIsDecreasing(t *testing.T) {
 func TestAssertIsDecreasing_fail(t *testing.T) {
 	tests := []struct {
 		name   string
-		object interface{}
+		object any
 	}{
 		{name: "int_empty", object: []int{}},
 		{name: "int_one", object: []int{4}},
@@ -929,7 +1032,7 @@ func TestAssertIsDecreasing_fail(t *testing.T) {
 
 func TestAssertSameElements(t *testing.T) {
 	t.Run("String", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			t.Helper()
 
 			testEqual(t, str, str)
@@ -979,7 +1082,7 @@ func TestAssertSameElements(t *testing.T) {
 
 func TestAssertSameElementsFails(t *testing.T) {
 	t.Run("Not an array", func(t *testing.T) {
-		MockInputStringRunTests(t, MockInputStringFull(), func(t *testing.T, index int, str string) {
+		FuzzUtilRunTests(t, FuzzStringFull(), func(t *testing.T, index int, str string) {
 			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
 				AssertSameElements(t, str, str)
 			})
@@ -1180,7 +1283,7 @@ func TestAssertNoFileExists_fail(t *testing.T) {
 func TestAssertDirExists(t *testing.T) {
 	for _, dir := range []string{"ci", "internal", "testdata", os.TempDir()} {
 		t.Run(dir, func(t *testing.T) {
-			AssertDirExist(t, dir)
+			AssertDirExists(t, dir)
 		})
 	}
 }
@@ -1189,7 +1292,7 @@ func TestAssertDirExists_fail(t *testing.T) {
 	for _, dir := range []string{"asdasdasdasd", "LICENSE", "CHANGELOG.md"} {
 		t.Run(dir, func(t *testing.T) {
 			AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
-				AssertDirExist(t, dir)
+				AssertDirExists(t, dir)
 			})
 		})
 	}
@@ -1270,5 +1373,231 @@ func TestAssertSubset_fail(t *testing.T) {
 		s3 := generateStruct()
 		s4 := generateStruct()
 		AssertNoSubset(t, []assertionTestStruct{s1, s2, s3}, []assertionTestStruct{s3, s4})
+	})
+}
+
+// -- Assert output consistency --
+func TestOutputConsistency(t *testing.T) {
+	var tm testMock
+
+	t.Run("failed test", func(t *testing.T) {
+		pterm.DisableStyling()
+		AssertEqual(&tm, true, false)
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test with custom msg", func(t *testing.T) {
+		pterm.DisableStyling()
+		AssertEqual(&tm, true, false, "Custom message!")
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test with custom formatted msg", func(t *testing.T) {
+		pterm.DisableStyling()
+		AssertEqual(&tm, true, false, "Custom %s!", "message")
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test string", func(t *testing.T) {
+		const expected = `Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+Fusce consectetur quam id turpis blandit, pulvinar fermentum justo sollicitudin.
+Curabitur vehicula eros posuere efficitur egestas.
+
+Duis et lectus in nisi mattis convallis non a odio.
+Proin pulvinar felis consectetur condimentum tincidunt.`
+
+		const actual = `Lorem ipsum sit amet, consechbtetur adipiscing elit.z
+
+zFusce consecetur quam iod turpis blandit, pulvnar fermentum justo sollicitudin.
+Curdabitur veicular eros posuere hello efficitulr egestas.
+Duis et lectus in nisi mattis convallis non a odio.
+Proin puvinar feliss consectetur codiementum tincidunt.`
+
+		pterm.DisableStyling()
+		AssertEqual(&tm, expected, actual)
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test struct", func(t *testing.T) {
+		pterm.DisableStyling()
+		AssertEqual(&tm, assertionTestStruct{
+			Name: "John",
+			Age:  34,
+			Meta: assertionTestStructNested{
+				ID:    512345,
+				Admin: false,
+			},
+		}, assertionTestStruct{
+			Name: "Bob",
+			Age:  22,
+			Meta: assertionTestStructNested{
+				ID:    123456,
+				Admin: true,
+			},
+		})
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test slice", func(t *testing.T) {
+		pterm.DisableStyling()
+		AssertEqual(&tm, nil, []int{1, 2, 3})
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test newlines", func(t *testing.T) {
+		pterm.DisableStyling()
+		AssertEqual(&tm, `1234567890`, `1
+2
+3
+4
+5
+6
+7
+8
+9
+0`)
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test newline start", func(t *testing.T) {
+		pterm.DisableStyling()
+		AssertEqual(&tm, `1`, `
+1`)
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test newline end", func(t *testing.T) {
+		pterm.DisableStyling()
+		AssertEqual(&tm, `1`, `1
+`)
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+
+	t.Run("failed test many matching lines", func(t *testing.T) {
+		dataExpected := make([]string, 50)
+		dataActual := make([]string, 50)
+		for i := 0; i < len(dataExpected); i++ {
+			dataExpected[i] = strconv.Itoa(i)
+			dataActual[i] = dataExpected[i]
+		}
+
+		dataActual[10] = "hello"
+		dataActual[20] = "world"
+		dataActual[30] = "foo"
+		dataActual[40] = "bar"
+
+		pterm.DisableStyling()
+		AssertEqual(&tm, strings.Join(dataExpected, "\n"), strings.Join(dataActual, "\n"))
+		pterm.EnableStyling()
+
+		err := SnapshotCreateOrValidate(t, t.Name(), tm.ErrorMessage)
+		AssertNoError(t, err)
+	})
+}
+
+func TestAssertUnique(t *testing.T) {
+	AssertUnique(t, []int{1, 2, 3, 4, 5})
+	AssertUnique(t, []string{"foo", "bar", "baz"})
+	AssertUnique(t, []bool{true, false})
+	AssertUnique(t, []float64{1.1, 1.2, 1.3, 1.4, 1.5})
+}
+
+func TestAssertUnique_fails(t *testing.T) {
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertUnique(t, []int{1, 2, 3, 4, 5, 1})
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertUnique(t, []string{"foo", "bar", "baz", "foo"})
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertUnique(t, []bool{true, false, true})
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertUnique(t, []float64{1.1, 1.2, 1.3, 1.4, 1.5, 1.1})
+	})
+}
+
+func TestAssertNotUnique(t *testing.T) {
+	AssertNotUnique(t, []int{1, 2, 3, 4, 5, 1})
+	AssertNotUnique(t, []string{"foo", "bar", "baz", "foo"})
+	AssertNotUnique(t, []bool{true, false, true})
+	AssertNotUnique(t, []float64{1.1, 1.2, 1.3, 1.4, 1.5, 1.1})
+}
+
+func TestAssertNotUnique_fails(t *testing.T) {
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertNotUnique(t, []int{1, 2, 3, 4, 5})
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertNotUnique(t, []string{"foo", "bar", "baz"})
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertNotUnique(t, []bool{true, false})
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertNotUnique(t, []float64{1.1, 1.2, 1.3, 1.4, 1.5})
+	})
+}
+
+func TestAssertInRange(t *testing.T) {
+	AssertInRange(t, 2, 1, 3)
+	AssertInRange(t, 1, 1, 3)
+}
+
+func TestAssertInRange_fails(t *testing.T) {
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertNotInRange(t, 1, 1, 3)
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertNotInRange(t, 2, 1, 3)
+	})
+}
+
+func TestAssertNotInRange(t *testing.T) {
+	AssertNotInRange(t, 4, 1, 3)
+	AssertNotInRange(t, 0, 1, 3)
+}
+
+func TestAssertNotInRange_fails(t *testing.T) {
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertInRange(t, 4, 1, 3)
+	})
+
+	AssertTestFails(t, func(t TestingPackageWithFailFunctions) {
+		AssertInRange(t, 0, 1, 3)
 	})
 }

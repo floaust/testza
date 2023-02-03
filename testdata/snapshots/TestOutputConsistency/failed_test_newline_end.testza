@@ -1,0 +1,1 @@
+(string) (len=227) "\n\n   1| Two objects that should be equal, are not equal.\n   2| \n   3| Expected:\n   4| (string) (len=1) \"1\"\n   5| \n   6| Actual:\n   7| (string) (len=2) \"1\\n\"\n   8| \n   9| Difference:\n  10| (1. -) 1\n  11| (1. +) 1\n  12| (2. +) \n\n"
